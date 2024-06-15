@@ -4,5 +4,7 @@
 all:
 	gcc -o cat main.c 
 clean:
-	rm -f ./cat 
+	-rm -f ./cat 
+
+
 
