@@ -1,2 +1,2 @@
 # cat
-Igapo cat application for Ubuntu.
+Cat application for Ubuntu.

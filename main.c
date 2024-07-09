@@ -1,4 +1,4 @@
-// cat - concatenate files and print on the standard output
+// cat - Concatenate files and print on the standard output
 // 2022 - Fred Nora.
 // See:
 // https://man7.org/linux/man-pages/man1/cat.1.html
@@ -20,7 +20,17 @@
 
 //4KB
 #define __BufferSize  (4*1024)
+static char buffer[__BufferSize];
 
+static int Max = 8;  // Max number of files
+
+// Flags
+static int fNumber=FALSE;
+static int fShowTabs=FALSE;
+static int fShowEnds=FALSE;
+//...
+
+// Strings
 const char *VersionString = "Version 1.0";
 const char *HelpString = "options: --help, --version, --number";
 //...
@@ -29,6 +39,8 @@ const char *HelpString = "options: --help, --version, --number";
 static void doHelp(void);
 static void doVersion(void);
 // ...
+static int process_file(char *file_name, int file_index);
+static void __clear_buffer(void);
 //-----------------------------
 
 static void doHelp(void)
@@ -40,21 +52,76 @@ static void doVersion(void)
     printf("%s\n",VersionString);
 }
 
-int main(int argc, char *argv[])
+// OUT:
+// nwrites or fail.
+static int process_file(char *file_name, int file_index)
 {
-    FILE *fp;
-    static char buffer[__BufferSize];  // tmp
-
-    int fd=-1;
+    int ReturnValue = 0;
+    int fdRead = -1;
+    int fdWrite = 1;  //stdout
     register int nreads = 0;
     register int nwrites = 0;
-    size_t size=0;
-    int Max = 8;  //#test
+
+// Parameters
+    if ( (void*) file_name == NULL ){
+        printf ("process_file: Missing file_name parameter in file {%d}\n", 
+            file_index);
+        goto fail;
+    }
+    // see: Max
+    if (file_index < 0){
+        printf ("process_file: file_index parameter failed in file {%d}\n", 
+            file_index);
+        goto fail;
+    }
+
+// Open
+    fdRead = (int) open((char *) file_name, 0, "a+");
+    if (fdRead < 0){
+        printf ("process_file: File {%d} failed on open()\n", 
+            file_index);
+        goto fail;
+    }
+// Read from fd.
+    nreads = read( fdRead, buffer, 511 );
+    if (nreads <= 0){
+        printf ("cat: File {%d} failed on read()\n", 
+            file_index);
+        goto fail;
+    }
+// Write on stdout. If there's no redirection. 
+// Print the whole file into the screen.
+// In this case we don't have any modification flag.
+    nwrites = write( fdWrite, buffer, sizeof(buffer) );
+    if (nwrites <= 0){
+        printf ("cat: File {%d} failed on write()\n", 
+            file_index);
+        goto fail;
+    }
+    ReturnValue = nwrites;
+
+// Clear the buffer
+    __clear_buffer();
+
+    return (int) ReturnValue;
+fail:
+    return (int) -1;
+}
+
+static void __clear_buffer(void)
+{
     register int i=0;
-// Flags
-    int fNumber=FALSE;
-    int fShowTabs=FALSE;
-    int fShowEnds=FALSE;
+    for (i=0; i<__BufferSize; i++)
+        buffer[i] = 0;
+}
+
+int main(int argc, char *argv[])
+{
+    register int i=0;
+    int FileStatus = -1;
+
+// Max number of files.
+    Max = 8;
 
     /*
     // #debug
@@ -65,79 +132,63 @@ int main(int argc, char *argv[])
     printf("\n");
     */
 
-    if (argc <= 0){
-        printf("cat: No args\n");
+    if (argc <= 1){
+        printf("Few parameters\n");
+        doHelp();
         goto fail;
     }
-    if (argc == 1){
-        printf("cat: We need more args\n");
-        //call usage()
+    if (argc >= Max){
+        printf("Too many files\n");
         goto fail;
     }
 
 // Clear the tmp buffer.
-// #todo: Actually we're gonna malloc the buffer
+// #todo: 
+// Actually we're gonna malloc the buffer
 // based on the file size. I guess.
-
-    for (i=0; i<__BufferSize; i++){
-        buffer[i] = 0;
-    };
-
-    if (argc > Max){
-        printf("Too much files in the commnad line\n");
-        goto fail;
-    }
+    __clear_buffer();
 
 // Probe for some flags.
-    int isFlag=FALSE;
+    int isFlag = FALSE;
     for (i=1; i<argc; i++)
     {
-        isFlag=FALSE;
+        isFlag = FALSE;
 
         if ( strncmp( argv[i], "--help", 6) == 0 ){
-            doHelp();
             isFlag=TRUE;
+            doHelp();
             goto done;
         }
         if ( strncmp( argv[i], "--version", 9) == 0 ){
-            doVersion();
             isFlag=TRUE;
+            doVersion();
             goto done;
         }
         if ( strncmp( argv[i], "--number", 8) == 0 ){
-            fNumber = TRUE;
             isFlag=TRUE;
+            fNumber = TRUE;
         }
         if ( strncmp( argv[i], "--show-tabs", 11) == 0 ){
+            isFlag = TRUE;
             fShowTabs = TRUE;
-            isFlag=TRUE;
         }
         if ( strncmp( argv[i], "--show-ends", 11) == 0 ){
+            isFlag = TRUE;
             fShowEnds = TRUE;
-            isFlag=TRUE;
         }
         
         //
-        // It's not a flag.
+        // It's NOT a flag.
         //
 
         // Open the file and print the content into the screen.
         if (isFlag == FALSE)
         {
-            fd = (int) open((char *) argv[i], 0, "a+");
-            if (fd < 0){
+            if (i >= Max){
                 goto fail;
             }
-            // Read from fd.
-            nreads = read( fd, buffer, 511 );
-            if (nreads <= 0){
-                printf ("cat: read() failed\n");
-                goto fail;
-            }
-            // Write on stdout.
-            nwrites = write( 1, buffer, sizeof(buffer) );
-            if (nwrites <= 0){
-                printf ("cat: File {%d} failed on write()\n", i);
+            FileStatus = (int) process_file((char *) argv[i], i);
+            if (FileStatus < 0){
                 goto fail;
             }
         }
@@ -148,7 +199,4 @@ done:
 fail:
     return EXIT_FAILURE;
 }
-
-
-
 
